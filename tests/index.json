@@ -1,17 +1,134 @@
 {
-  "files": [
-    "cs0_002_domain1.quiz.json",
-    "cs0_002_domain2.quiz.json",
-    "cs0_002_domain3.quiz.json",
-    "cs0_002_domain4.quiz.json",
-    "cs0_002_domain5.quiz.json",
-    "cs0_002_practice_test_1.quiz.json",
-    "cs0_002_practice_test_2.quiz.json",
-    "cs0_003_domain1.quiz.json",
-    "cs0_003_domain2.quiz.json",
-    "cs0_003_domain3.quiz.json",
-    "cs0_003_domain4.quiz.json",
-    "cs0_003_practice_test_1.quiz.json",
-    "cs0_003_practice_test_2.quiz.json"
+  "packs": [
+    {
+      "file": "cs0_002_domain1.quiz.json",
+      "id": "cs0_002_domain1",
+      "title": "CompTIA CySA+ CS0-002 - Domain 1 Practice Tests",
+      "version": "CS0-002",
+      "totalQuestions": 308,
+      "chapters": [
+        "Domain 1"
+      ]
+    },
+    {
+      "file": "cs0_002_domain2.quiz.json",
+      "id": "cs0_002_domain2",
+      "title": "CompTIA CySA+ CS0-002 - Domain 2 Practice Tests",
+      "version": "CS0-002",
+      "totalQuestions": 202,
+      "chapters": [
+        "Domain 2"
+      ]
+    },
+    {
+      "file": "cs0_002_domain3.quiz.json",
+      "id": "cs0_002_domain3",
+      "title": "CompTIA CySA+ CS0-002 - Domain 3 Practice Tests",
+      "version": "CS0-002",
+      "totalQuestions": 200,
+      "chapters": [
+        "Domain 3"
+      ]
+    },
+    {
+      "file": "cs0_002_domain4.quiz.json",
+      "id": "cs0_002_domain4",
+      "title": "CompTIA CySA+ CS0-002 - Domain 4 Practice Tests",
+      "version": "CS0-002",
+      "totalQuestions": 222,
+      "chapters": [
+        "Domain 4"
+      ]
+    },
+    {
+      "file": "cs0_002_domain5.quiz.json",
+      "id": "cs0_002_domain5",
+      "title": "CompTIA CySA+ CS0-002 - Domain 5 Practice Tests",
+      "version": "CS0-002",
+      "totalQuestions": 109,
+      "chapters": [
+        "Domain 5"
+      ]
+    },
+    {
+      "file": "cs0_002_practice_test_1.quiz.json",
+      "id": "cs0_002_practice_test_1",
+      "title": "CompTIA CySA+ CS0-002 - Practice Test 1",
+      "version": "CS0-002",
+      "totalQuestions": 85,
+      "chapters": [
+        "Practice Test 1"
+      ]
+    },
+    {
+      "file": "cs0_002_practice_test_2.quiz.json",
+      "id": "cs0_002_practice_test_2",
+      "title": "CompTIA CySA+ CS0-002 - Practice Test 2",
+      "version": "CS0-002",
+      "totalQuestions": 85,
+      "chapters": [
+        "Practice Test 2"
+      ]
+    },
+    {
+      "file": "cs0_003_domain1.quiz.json",
+      "id": "cs0_003_domain1",
+      "title": "CompTIA CySA+ CS0-003 - Domain 1 Practice Tests",
+      "version": "CS0-003",
+      "totalQuestions": 250,
+      "chapters": [
+        "Domain 1"
+      ]
+    },
+    {
+      "file": "cs0_003_domain2.quiz.json",
+      "id": "cs0_003_domain2",
+      "title": "CompTIA CySA+ CS0-003 - Domain 2 Practice Tests",
+      "version": "CS0-003",
+      "totalQuestions": 333,
+      "chapters": [
+        "Domain 2"
+      ]
+    },
+    {
+      "file": "cs0_003_domain3.quiz.json",
+      "id": "cs0_003_domain3",
+      "title": "CompTIA CySA+ CS0-003 - Domain 3 Practice Tests",
+      "version": "CS0-003",
+      "totalQuestions": 150,
+      "chapters": [
+        "Domain 3"
+      ]
+    },
+    {
+      "file": "cs0_003_domain4.quiz.json",
+      "id": "cs0_003_domain4",
+      "title": "CompTIA CySA+ CS0-003 - Domain 4 Practice Tests",
+      "version": "CS0-003",
+      "totalQuestions": 90,
+      "chapters": [
+        "Domain 4"
+      ]
+    },
+    {
+      "file": "cs0_003_practice_test_1.quiz.json",
+      "id": "cs0_003_practice_test_1",
+      "title": "CompTIA CySA+ CS0-003 - Practice Test 1",
+      "version": "CS0-003",
+      "totalQuestions": 85,
+      "chapters": [
+        "Practice Test 1"
+      ]
+    },
+    {
+      "file": "cs0_003_practice_test_2.quiz.json",
+      "id": "cs0_003_practice_test_2",
+      "title": "CompTIA CySA+ CS0-003 - Practice Test 2",
+      "version": "CS0-003",
+      "totalQuestions": 85,
+      "chapters": [
+        "Practice Test 2"
+      ]
+    }
   ]
 }

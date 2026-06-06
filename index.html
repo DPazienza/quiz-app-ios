@@ -236,6 +236,64 @@
     return { id, filename, metadata:meta, title, shortTitle:cleanTitle(title), version, enabled:true, questions };
   }
 
+  function indexEntryToPack(entry){
+    const filename = typeof entry === 'string' ? entry : (entry.file || entry.filename || entry.path);
+    if(!filename) throw new Error('Voce index senza file');
+    const cleanFile = filename.split('/').pop();
+    const baseId = cleanFile.replace(/\.quiz\.json$|\.json$/i,'').replace(/[^a-z0-9_\-]+/ig,'_').toLowerCase();
+    const meta = typeof entry === 'object' ? (entry.metadata || entry) : {};
+    const id = meta.id || baseId;
+    const version = meta.version || getVersion(meta, cleanFile);
+    const title = meta.title || cleanFile;
+    const chapters = Array.isArray(meta.chapters) ? meta.chapters : (meta.chapter ? [meta.chapter] : []);
+    return {
+      id,
+      filename: cleanFile,
+      metadata: meta,
+      title,
+      shortTitle: cleanTitle(title),
+      version,
+      enabled: false,
+      loaded: false,
+      remoteUrl: filename.startsWith('tests/') ? filename : `tests/${filename}`,
+      questionCount: meta.totalQuestions || meta.questionCount || meta.questions || 0,
+      chapters,
+      questions: []
+    };
+  }
+
+  async function ensurePackLoaded(pack){
+    if(pack.loaded || (Array.isArray(pack.questions) && pack.questions.length)) return pack;
+    if(!pack.remoteUrl) throw new Error(`${pack.filename || pack.title} non ha un percorso remoto`);
+    toast(`Scarico ${pack.filename}...`);
+    const res = await fetch(pack.remoteUrl, {cache:'no-store'});
+    if(!res.ok) throw new Error(`HTTP ${res.status} su ${pack.remoteUrl}`);
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch(e){
+      const preview = text.slice(0,80).replace(/\s+/g,' ');
+      throw new Error(`${pack.remoteUrl} non è JSON valido (${preview})`);
+    }
+    const loaded = normalizePack(data, pack.filename || pack.remoteUrl.split('/').pop());
+    Object.assign(pack, loaded, { enabled: pack.enabled, loaded: true, remoteUrl: pack.remoteUrl, questionCount: loaded.questions.length });
+    return pack;
+  }
+
+  async function ensureSelectedPacksLoaded(){
+    const packs = selectedPacks();
+    if(!packs.length) throw new Error('Nessun test selezionato');
+    let loadedNow = 0;
+    for(const pack of packs){
+      if(!pack.loaded && (!pack.questions || !pack.questions.length)){
+        await ensurePackLoaded(pack);
+        loadedNow++;
+      }
+    }
+    if(loadedNow) toast(`Scaricati ${loadedNow} test selezionati`);
+    renderAll();
+  }
+
   async function addFiles(files){
     let count=0;
     for(const file of files){
@@ -254,29 +312,30 @@
 
   async function autoLoadTests(){
     try{
+      toast('Leggo tests/index.json...');
       const res = await fetch('tests/index.json', {cache:'no-store'});
       if(!res.ok) throw new Error('tests/index.json non trovato');
-      const idx = await res.json();
-      const files = Array.isArray(idx) ? idx : idx.files;
-      if(!Array.isArray(files) || !files.length) throw new Error('index vuoto');
-      let loaded=0;
-      for(const f of files){
-        const url = f.startsWith('tests/') ? f : `tests/${f}`;
-        const r = await fetch(url, {cache:'no-store'});
-        if(!r.ok) throw new Error(`non riesco a leggere ${url}`);
-        const data = await r.json();
-        const pack = normalizePack(data, url.split('/').pop());
+      const idxText = await res.text();
+      let idx;
+      try { idx = JSON.parse(idxText); }
+      catch(e){ throw new Error('tests/index.json non è JSON valido'); }
+      const entries = Array.isArray(idx) ? idx : (idx.packs || idx.files || idx.tests || []);
+      if(!Array.isArray(entries) || !entries.length) throw new Error('index vuoto');
+      let found=0;
+      for(const entry of entries){
+        const pack = indexEntryToPack(entry);
         const existing = state.packs.findIndex(p=>p.id===pack.id);
-        if(existing >= 0) state.packs[existing] = pack; else state.packs.push(pack);
-        loaded++;
+        if(existing >= 0) state.packs[existing] = {...state.packs[existing], ...pack, enabled: state.packs[existing].enabled};
+        else state.packs.push(pack);
+        found++;
       }
-      toast(`Auto-caricati ${loaded} test`);
+      toast(`Trovati ${found} test. Seleziona i file e premi Start.`);
       renderAll();
-    } catch(e){ toast(`Auto tests/: ${e.message}`); }
+    } catch(e){ console.error(e); toast(`Auto tests/: ${e.message}`); }
   }
 
   function selectedPacks(){ return state.packs.filter(p=>p.enabled); }
-  function allQuestionRefs(){ return selectedPacks().flatMap(pack => pack.questions.map(q=>({pack,q,key:qKey(pack,q), chapter:getChapter(pack,q)}))); }
+  function allQuestionRefs(){ return selectedPacks().flatMap(pack => (pack.questions||[]).map(q=>({pack,q,key:qKey(pack,q), chapter:getChapter(pack,q)}))); }
   function progressFor(key){ return state.progress.questions[key] || {}; }
 
   function renderPacks(){
@@ -284,7 +343,9 @@
     if(!state.packs.length){ els.packListWrap.innerHTML = '<p class="hint" style="margin:6px">Nessun test caricato.</p>'; return; }
     for(const pack of state.packs){
       const row = document.createElement('label'); row.className='packItem';
-      row.innerHTML = `<div class="packTitle"><input type="checkbox" ${pack.enabled?'checked':''} data-pack="${escapeHtml(pack.id)}"><span>${escapeHtml(pack.version)} · ${escapeHtml(pack.shortTitle || pack.title)}</span></div><div class="packMeta">${escapeHtml(pack.filename)} · ${pack.questions.length} domande</div>`;
+      const qn = (pack.questions && pack.questions.length) ? pack.questions.length : (pack.questionCount || 0);
+      const status = (pack.loaded || (pack.questions && pack.questions.length)) ? 'caricato' : 'da scaricare';
+      row.innerHTML = `<div class="packTitle"><input type="checkbox" ${pack.enabled?'checked':''} data-pack="${escapeHtml(pack.id)}"><span>${escapeHtml(pack.version)} · ${escapeHtml(pack.shortTitle || pack.title)}</span></div><div class="packMeta">${escapeHtml(pack.filename)} · ${qn || '?'} domande · ${status}</div>`;
       row.querySelector('input').addEventListener('change', e=>{ pack.enabled=e.target.checked; renderAll(); });
       els.packListWrap.appendChild(row);
     }
@@ -294,15 +355,27 @@
     const by = {};
     let total=0, done=0, err=0;
     for(const pack of state.packs){
-      for(const q of pack.questions){
-        const key=qKey(pack,q), pr=progressFor(key); const chapter=getChapter(pack,q);
-        const v=pack.version; by[v] ||= {}; by[v][chapter] ||= {total:0, done:0, err:0};
-        by[v][chapter].total++; total++;
-        if((pr.attempts||0)>0){ by[v][chapter].done++; done++; if((pr.wrong||0)>0){ by[v][chapter].err++; err++; } }
+      if(pack.questions && pack.questions.length){
+        for(const q of pack.questions){
+          const key=qKey(pack,q), pr=progressFor(key); const chapter=getChapter(pack,q);
+          const v=pack.version; by[v] ||= {}; by[v][chapter] ||= {total:0, done:0, err:0};
+          by[v][chapter].total++; total++;
+          if((pr.attempts||0)>0){ by[v][chapter].done++; done++; if((pr.wrong||0)>0){ by[v][chapter].err++; err++; } }
+        }
+      } else {
+        const v = pack.version || 'Altro';
+        const chapters = pack.chapters && pack.chapters.length ? pack.chapters : [pack.metadata?.chapter || pack.title || pack.filename || 'Non caricato'];
+        const perChapter = Math.max(1, Math.round((pack.questionCount||0) / chapters.length));
+        for(const chapter of chapters){
+          by[v] ||= {}; by[v][chapter] ||= {total:0, done:0, err:0};
+          by[v][chapter].total += perChapter;
+        }
+        total += pack.questionCount || 0;
       }
     }
     els.statQuestions.textContent=total; els.statDone.textContent=done; els.statErrors.textContent=err;
     els.statsByVersion.innerHTML = '';
+    if(!Object.keys(by).length){ els.statsByVersion.innerHTML = '<p class="hint">Nessun test caricato.</p>'; return; }
     for(const version of Object.keys(by).sort()){
       const div = document.createElement('div'); div.className='versionBlock';
       const vt = Object.values(by[version]).reduce((a,b)=>({total:a.total+b.total,done:a.done+b.done,err:a.err+b.err}), {total:0,done:0,err:0});
@@ -320,7 +393,11 @@
 
   function renderChapters(){
     const old = els.chapterSelect.value;
-    const chapters = [...new Set(selectedPacks().flatMap(p=>p.questions.map(q=>getChapter(p,q))))].sort();
+    const chapters = [...new Set(selectedPacks().flatMap(p=>{
+      if(p.questions && p.questions.length) return p.questions.map(q=>getChapter(p,q));
+      if(p.chapters && p.chapters.length) return p.chapters;
+      return [p.metadata?.chapter || p.title || p.filename || 'General'];
+    }))].sort();
     els.chapterSelect.innerHTML = '<option value="all">Tutti</option>' + chapters.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
     if(chapters.includes(old)) els.chapterSelect.value=old;
   }
@@ -430,7 +507,9 @@
     }
     return pool;
   }
-  function startQuiz(){
+  async function startQuiz(){
+    try { await ensureSelectedPacksLoaded(); }
+    catch(e){ toast(e.message); return; }
     let pool=buildPool();
     if(!pool.length){ toast('Nessuna domanda disponibile per questi filtri'); return; }
     const n=Math.max(1, parseInt(els.numQuestions.value||pool.length,10));
@@ -439,9 +518,10 @@
     const shuffleAns=els.shuffleAnswers.checked;
     state.sessionId = `s_${Date.now()}`;
     state.session = pool.map(ref=>({ ...ref, options: shuffleAns ? shuffle(ref.q.options) : [...ref.q.options], answered:false, result:null, selected:null }));
-    state.current=0; state.selectedKey=null; state.sessionTitle = selectedPacks().map(p=>`${p.version} ${getChapter(p,p.questions[0])}`).slice(0,2).join(' · ') || 'Quiz';
+    state.current=0; state.selectedKey=null; state.sessionTitle = selectedPacks().filter(p=>p.questions&&p.questions.length).map(p=>`${p.version} ${getChapter(p,p.questions[0])}`).slice(0,2).join(' · ') || 'Quiz';
     renderQuestion(); closeRails(); toast(`Quiz generato: ${state.session.length} domande`);
   }
+
 
   function setScope(scope){
     for(const p of state.packs){
