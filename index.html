@@ -114,6 +114,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:12px">
           <label class="uploadLabel primary">Importa test<input id="testFileInput2" type="file" accept="application/json,.json,.quiz.json" multiple hidden></label>
           <button id="emptyAutoLoadBtn" class="btn">Auto tests/</button>
+          <button id="emptyStartQuizBtn" class="startButton hidden">Start quiz</button>
         </div>
       </div>
       <section id="questionCard" class="questionCard hidden">
@@ -194,7 +195,7 @@
     testFileInput: $('testFileInput'), testFileInput2: $('testFileInput2'), autoLoadBtn: $('autoLoadBtn'), emptyAutoLoadBtn: $('emptyAutoLoadBtn'),
     packListWrap: $('packListWrap'), togglePacksBtn: $('togglePacksBtn'), packHint: $('packHint'),
     statQuestions: $('statQuestions'), statDone: $('statDone'), statErrors: $('statErrors'), statsByVersion: $('statsByVersion'),
-    modeSelect: $('modeSelect'), numQuestions: $('numQuestions'), chapterSelect: $('chapterSelect'), startQuizBtn: $('startQuizBtn'),
+    modeSelect: $('modeSelect'), numQuestions: $('numQuestions'), chapterSelect: $('chapterSelect'), startQuizBtn: $('startQuizBtn'), emptyStartQuizBtn: $('emptyStartQuizBtn'), shuffleQuestions: $('shuffleQuestions'), shuffleAnswers: $('shuffleAnswers'),
     emptyState: $('emptyState'), questionCard: $('questionCard'), qMeta: $('qMeta'), qCount: $('qCount'), qProgressFill: $('qProgressFill'), qText: $('qText'), qContent: $('qContent'), options: $('options'), response: $('response'),
     prevBtn: $('prevBtn'), confirmBtn: $('confirmBtn'), nextBtn: $('nextBtn'), reviewBtn: $('reviewBtn'),
     topActiveTest: $('topActiveTest'), topQuestionProgress: $('topQuestionProgress'), topScoreMeta: $('topScoreMeta'),
@@ -488,7 +489,15 @@
     });
   }
 
-  function renderAll(){ saveProgressSilent(); renderPacks(); renderStats(); renderChapters(); renderSession(); if(state.session.length) renderQuestion(false); }
+  function renderAll(){
+    saveProgressSilent();
+    renderPacks();
+    renderStats();
+    renderChapters();
+    renderSession();
+    if(els.emptyStartQuizBtn) els.emptyStartQuizBtn.classList.toggle('hidden', !state.packs.length || !!state.session.length);
+    if(state.session.length) renderQuestion(false);
+  }
   function saveProgressSilent(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.progress)); }catch(e){ console.warn(e); } }
 
   function optionText(q, key){ const o=q.options.find(x=>normalizeKey(x.key)===normalizeKey(key)); return o ? o.text : ''; }
@@ -573,20 +582,23 @@
     return pool;
   }
   async function startQuiz(){
-    if(!selectedPacks().length && state.packs.length){
-      const scope = getActiveScope();
-      if(scope !== 'manual') setScope(scope);
+    const scope = getActiveScope();
+    if(!selectedPacks().length && state.packs.length && scope !== 'manual') setScope(scope);
+    if(!selectedPacks().length){ toast('Nessun test selezionato. Usa Auto tests/ oppure importa un file .quiz.json.'); return; }
+    try {
+      toast('Preparo i test selezionati...');
+      await ensureSelectedPacksLoaded();
     }
-    try { await ensureSelectedPacksLoaded(); }
-    catch(e){ toast(e.message); return; }
+    catch(e){ console.error(e); toast(e.message || 'Errore caricamento test'); return; }
     let pool=buildPool();
     if(!pool.length){ toast('Nessuna domanda disponibile per questi filtri'); return; }
     const n=Math.max(1, parseInt(els.numQuestions.value||pool.length,10));
-    if(els.shuffleQuestions.checked) pool=shuffle(pool); else pool=[...pool];
+    const doShuffleQuestions = els.shuffleQuestions ? els.shuffleQuestions.checked : true;
+    const doShuffleAnswers = els.shuffleAnswers ? els.shuffleAnswers.checked : true;
+    if(doShuffleQuestions) pool=shuffle(pool); else pool=[...pool];
     pool=pool.slice(0, Math.min(n, pool.length));
-    const shuffleAns=els.shuffleAnswers.checked;
     state.sessionId = `s_${Date.now()}`;
-    state.session = pool.map(ref=>({ ...ref, options: shuffleAns ? shuffle(ref.q.options) : [...ref.q.options], answered:false, result:null, selected:null }));
+    state.session = pool.map(ref=>({ ...ref, options: doShuffleAnswers ? shuffle(ref.q.options) : [...ref.q.options], answered:false, result:null, selected:null }));
     state.current=0; state.selectedKey=null; state.sessionTitle = selectedPacks().filter(p=>p.questions&&p.questions.length).map(p=>`${p.version} ${getChapter(p,p.questions[0])}`).slice(0,2).join(' · ') || 'Quiz';
     renderQuestion(); closeRails(); toast(`Quiz generato: ${state.session.length} domande`);
   }
@@ -628,7 +640,7 @@
   els.autoLoadBtn.addEventListener('click', autoLoadTests); els.emptyAutoLoadBtn.addEventListener('click', autoLoadTests);
   els.togglePacksBtn.addEventListener('click', togglePacks);
   document.querySelectorAll('.scope').forEach(b=>b.addEventListener('click',()=>setScope(b.dataset.scope)));
-  els.startQuizBtn.addEventListener('click', startQuiz);
+  els.startQuizBtn.addEventListener('click', startQuiz); if(els.emptyStartQuizBtn) els.emptyStartQuizBtn.addEventListener('click', startQuiz);
   els.prevBtn.addEventListener('click', prevQuestion); els.nextBtn.addEventListener('click', nextQuestion); els.confirmBtn.addEventListener('click', confirmAnswer); els.reviewBtn.addEventListener('click', toggleReview);
   els.mobileStatsBtn.addEventListener('click', openLeft); els.mobileQuizBtn.addEventListener('click', closeRails); els.mobileSessionBtn.addEventListener('click', openRight); els.railBackdrop.addEventListener('click', closeRails);
   els.imageDialog.addEventListener('click', ()=>els.imageDialog.close());

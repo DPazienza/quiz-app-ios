@@ -1,5 +1,5 @@
-const CACHE_NAME = 'quiz-app-ios-v4-app';
-const TEST_CACHE_NAME = 'quiz-app-ios-test-packs-v1';
+const CACHE_NAME = 'quiz-app-ios-v5-app';
+const TEST_CACHE_NAME = 'quiz-app-ios-test-packs-v2';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', event => {
