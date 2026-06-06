@@ -177,6 +177,7 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const STORAGE_KEY = 'quizAppIosProgressV1';
+  const TEST_CACHE_NAME = 'quiz-app-ios-test-packs-v1';
   const state = {
     packs: [],
     progress: loadProgress(),
@@ -262,21 +263,71 @@
     };
   }
 
+  function getActiveScope(){
+    return document.querySelector('.scope.active')?.dataset.scope || 'all';
+  }
+  function scopeMatches(pack, scope=getActiveScope()){
+    if(scope === 'manual') return !!pack.enabled;
+    if(scope === 'all') return true;
+    if(scope === 'cs0_002') return pack.version === 'CS0-002';
+    if(scope === 'cs0_003') return pack.version === 'CS0-003';
+    return true;
+  }
+  function canUseCache(){ return 'caches' in window; }
+  async function getCachedTestText(url){
+    if(!canUseCache()) return null;
+    try{
+      const cache = await caches.open(TEST_CACHE_NAME);
+      const hit = await cache.match(url);
+      if(!hit) return null;
+      return await hit.text();
+    }catch(e){ return null; }
+  }
+  async function putCachedTestResponse(url, response){
+    if(!canUseCache()) return;
+    try{
+      const cache = await caches.open(TEST_CACHE_NAME);
+      await cache.put(url, response.clone());
+    }catch(e){ console.warn('Cache test non disponibile', e); }
+  }
+  async function isTestCached(url){
+    if(!canUseCache()) return false;
+    try{
+      const cache = await caches.open(TEST_CACHE_NAME);
+      return !!(await cache.match(url));
+    }catch(e){ return false; }
+  }
+
+
   async function ensurePackLoaded(pack){
     if(pack.loaded || (Array.isArray(pack.questions) && pack.questions.length)) return pack;
     if(!pack.remoteUrl) throw new Error(`${pack.filename || pack.title} non ha un percorso remoto`);
-    toast(`Scarico ${pack.filename}...`);
-    const res = await fetch(pack.remoteUrl, {cache:'no-store'});
-    if(!res.ok) throw new Error(`HTTP ${res.status} su ${pack.remoteUrl}`);
-    const text = await res.text();
+
+    let text = await getCachedTestText(pack.remoteUrl);
+    if(text){
+      toast(`Carico ${pack.filename} dalla cache locale...`);
+      pack.cached = true;
+    } else {
+      toast(`Scarico ${pack.filename} una sola volta...`);
+      const res = await fetch(pack.remoteUrl, {cache:'default'});
+      if(!res.ok) throw new Error(`HTTP ${res.status} su ${pack.remoteUrl}`);
+      const clone = res.clone();
+      text = await res.text();
+      await putCachedTestResponse(pack.remoteUrl, clone);
+      pack.cached = true;
+    }
+
     let data;
     try { data = JSON.parse(text); }
     catch(e){
       const preview = text.slice(0,80).replace(/\s+/g,' ');
       throw new Error(`${pack.remoteUrl} non è JSON valido (${preview})`);
     }
+    const oldEnabled = pack.enabled;
+    const oldRemoteUrl = pack.remoteUrl;
+    const oldCached = pack.cached;
     const loaded = normalizePack(data, pack.filename || pack.remoteUrl.split('/').pop());
-    Object.assign(pack, loaded, { enabled: pack.enabled, loaded: true, remoteUrl: pack.remoteUrl, questionCount: loaded.questions.length });
+    Object.assign(pack, loaded, { enabled: oldEnabled, loaded: true, remoteUrl: oldRemoteUrl, questionCount: loaded.questions.length, cached: oldCached });
     return pack;
   }
 
@@ -313,7 +364,7 @@
   async function autoLoadTests(){
     try{
       toast('Leggo tests/index.json...');
-      const res = await fetch('tests/index.json', {cache:'no-store'});
+      const res = await fetch('tests/index.json', {cache:'default'});
       if(!res.ok) throw new Error('tests/index.json non trovato');
       const idxText = await res.text();
       let idx;
@@ -321,15 +372,29 @@
       catch(e){ throw new Error('tests/index.json non è JSON valido'); }
       const entries = Array.isArray(idx) ? idx : (idx.packs || idx.files || idx.tests || []);
       if(!Array.isArray(entries) || !entries.length) throw new Error('index vuoto');
+      const activeScope = getActiveScope();
       let found=0;
       for(const entry of entries){
         const pack = indexEntryToPack(entry);
+        pack.cached = await isTestCached(pack.remoteUrl);
+        pack.enabled = scopeMatches(pack, activeScope);
         const existing = state.packs.findIndex(p=>p.id===pack.id);
-        if(existing >= 0) state.packs[existing] = {...state.packs[existing], ...pack, enabled: state.packs[existing].enabled};
-        else state.packs.push(pack);
+        if(existing >= 0){
+          const old = state.packs[existing];
+          state.packs[existing] = {
+            ...pack,
+            enabled: activeScope === 'manual' ? old.enabled : scopeMatches(pack, activeScope),
+            loaded: old.loaded || (old.questions && old.questions.length > 0),
+            cached: old.cached || pack.cached,
+            questions: (old.questions && old.questions.length) ? old.questions : [],
+            questionCount: (old.questions && old.questions.length) ? old.questions.length : pack.questionCount
+          };
+        } else {
+          state.packs.push(pack);
+        }
         found++;
       }
-      toast(`Trovati ${found} test. Seleziona i file e premi Start.`);
+      toast(`Trovati ${found} test. Selezione attiva: ${activeScope.toUpperCase()}. Premi Start.`);
       renderAll();
     } catch(e){ console.error(e); toast(`Auto tests/: ${e.message}`); }
   }
@@ -344,7 +409,7 @@
     for(const pack of state.packs){
       const row = document.createElement('label'); row.className='packItem';
       const qn = (pack.questions && pack.questions.length) ? pack.questions.length : (pack.questionCount || 0);
-      const status = (pack.loaded || (pack.questions && pack.questions.length)) ? 'caricato' : 'da scaricare';
+      const status = (pack.loaded || (pack.questions && pack.questions.length)) ? 'caricato in memoria' : (pack.cached ? 'in cache locale' : 'da scaricare');
       row.innerHTML = `<div class="packTitle"><input type="checkbox" ${pack.enabled?'checked':''} data-pack="${escapeHtml(pack.id)}"><span>${escapeHtml(pack.version)} · ${escapeHtml(pack.shortTitle || pack.title)}</span></div><div class="packMeta">${escapeHtml(pack.filename)} · ${qn || '?'} domande · ${status}</div>`;
       row.querySelector('input').addEventListener('change', e=>{ pack.enabled=e.target.checked; renderAll(); });
       els.packListWrap.appendChild(row);
@@ -508,6 +573,10 @@
     return pool;
   }
   async function startQuiz(){
+    if(!selectedPacks().length && state.packs.length){
+      const scope = getActiveScope();
+      if(scope !== 'manual') setScope(scope);
+    }
     try { await ensureSelectedPacksLoaded(); }
     catch(e){ toast(e.message); return; }
     let pool=buildPool();
@@ -574,6 +643,7 @@
   });
 
   if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
   renderAll(); setScope('all');
 })();
 </script>
